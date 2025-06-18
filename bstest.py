@@ -37,9 +37,9 @@ def get_company_details(bplc_id: str, year: str = "2022") -> dict:
     # 6. 필드 추출 함수
     def extract_field(field_name):
         for row in rows:
-            th = row.find('th')
-            td = row.find('td')
-            if th and td:
+            th_list = row.find_all('th')
+            td_list = row.find_all('td')
+            for th, td in zip(th_list, td_list):
                 if field_name in th.text.strip():
                     return td.text.strip()
         return None
