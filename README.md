@@ -6,13 +6,17 @@
 
 > 환경부 화학물질 배출·이동량 정보시스템(ICIS)에서 특정 화학물질을 취급하는 업체들의 상세정보를 자동으로 수집하는 Python 크롤러입니다.
 
+![업로드](https://github.com/jiwoong5/businesscrawl/blob/main/assets/upload.png)
+![시각화](https://github.com/jiwoong5/businesscrawl/blob/main/assets/visualization.png)
+![업체상세정보](https://github.com/jiwoong5/businesscrawl/blob/main/assets/company_detail.png)
+
 ## 📋 목차
 
 - [기능](#-기능)
 - [설치](#-설치)
 - [사용법](#-사용법)
 - [출력 데이터](#-출력-데이터)
-- [주의사항](#-주의사항)
+- [대시보드](#-대시보드)
 - [기여](#-기여)
 - [라이선스](#-라이선스)
 
@@ -200,6 +204,28 @@ $ python company_crawler.py
 UnicodeDecodeError: 'utf-8' codec can't decode
 ```
 **해결방법**: 코드에서 자동 인코딩 감지를 사용하므로 대부분 해결됩니다.
+
+## 🚩 대시보드
+
+### 💡 개요
+본 프로젝트는 크롤링한 화학물질 배출·이동량 데이터를 보다 쉽게 확인하고 분석할 수 있도록 웹 기반 **대시보드 시각화 도구**를 제공합니다.  
+업체별 환경정보, 화학물질 사용 현황, 통계 요약 및 다양한 필터 기능을 통해 데이터 탐색이 가능합니다.
+
+### ⚙️ 주요 기능
+- JSON 형식 크롤링 결과 파일 업로드 및 데이터 로딩  
+- 업체 기본정보 및 화학물질별 상세 정보 테이블 조회  
+- 연도별, 물질별 필터링 및 선택적 데이터 표시  
+- 시각화 차트 (통계 요약, 트렌드, 분포 등) 제공  
+- 반응형 UI로 PC/모바일 모두 지원
+
+### 📥 설치 및 실행 방법
+
+1. 대시보드 프로젝트 클론 또는 다운로드  
+2. 필요한 npm 라이브러리 설치:
+   ```bash
+   npm install
+   npm start
+3. letscrawl.py 결과파일 (ex. 7727-21-1_2022년_업체정보.json) 업로드
 
 ## 🤝 기여
 
