@@ -6,11 +6,7 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<div>홈페이지 내용 또는 랜딩 페이지</div>} />
-        <Route
-          path="/company-visualization"
-          element={<CompanyVisualization />}
-        />
+        <Route path="/" element={<CompanyVisualization />} />
       </Routes>
     </Router>
   );
