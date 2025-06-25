@@ -52,7 +52,39 @@ class CompanyCrawler:
         except Exception as e:
             print(f"❌ 업체 목록 조회 실패: {e}")
             return []
+
     
+    def get_all_chemicals(self, bplc_id: str, year: str = "2022", page_unit: int = 200) -> List[Dict]:
+        base_url = "https://icis.me.go.kr/iprtr/selectListOpenMatter.do"
+        all_data = []
+        page_no = 1
+        
+        while True:
+            params = {
+                "searchYear": year,
+                "bplcId": bplc_id,
+                "downPageNo": page_no,
+                "downPageUnit": page_unit,
+            }
+            res = self.session.get(base_url, params=params, headers=self.headers)
+            res.raise_for_status()
+            json_data = res.json()
+            items = json_data.get("result", [])
+            
+            if not items:
+                break
+            
+            all_data.extend(items)
+            
+            # 총 개수 기반으로 종료 판단
+            total = items[0].get("TOTALCOUNT", 0)
+            total_pages = math.ceil(total / page_unit)
+            if page_no >= total_pages:
+                break
+            page_no += 1
+        
+        return all_data
+        
     def get_company_details(self, bplc_id: str, year: str = "2022") -> Dict:
         """업체 ID로 상세정보 조회"""
         print(f"📋 업체 ID '{bplc_id}' 상세정보 조회 중...")
@@ -118,68 +150,7 @@ class CompanyCrawler:
                 if company_name:
                     result['업체명'] = company_name.text.strip()
             
-            # 화학물질 정보 테이블 찾기 및 추출
-            chemical_tables = soup.find_all('table')
-            chemical_data = []
-            
-            for table in chemical_tables:
-                # 헤더에서 CAS No., 연간입고량, 연간사용판매량이 있는 테이블 찾기
-                thead = table.find('thead')
-                if not thead:
-                    continue
-                    
-                header_text = thead.get_text()
-                if 'CAS No' in header_text and ('입고' in header_text or '사용' in header_text):
-                    tbody = table.find('tbody')
-                    if not tbody:
-                        continue
-                    
-                    # 헤더 구조 분석
-                    header_rows = thead.find_all('tr')
-                    column_mapping = {}
-                    
-                    for header_row in header_rows:
-                        cells = header_row.find_all(['th', 'td'])
-                        col_index = 0
-                        
-                        for cell in cells:
-                            cell_text = cell.get_text(strip=True).replace('\n', ' ').replace('\r', ' ')
-                            colspan = int(cell.get('colspan', 1))
-                            
-                            if 'CAS No' in cell_text or 'CAS' in cell_text:
-                                column_mapping['cas_no'] = col_index
-                            elif '입고' in cell_text and '연간' in cell_text:
-                                column_mapping['annual_input'] = col_index
-                            elif '사용' in cell_text and '판매' in cell_text and '연간' in cell_text:
-                                column_mapping['annual_usage'] = col_index
-                            elif '물질명' in cell_text or '물질명칭' in cell_text:
-                                column_mapping['material_name'] = col_index
-                            
-                            col_index += colspan
-                    
-                    # 데이터 행 추출
-                    data_rows = tbody.find_all('tr')
-                    for row in data_rows:
-                        cells = row.find_all(['td', 'th'])
-                        if len(cells) > max(column_mapping.values()) if column_mapping else False:
-                            chemical_info = {}
-                            
-                            # 각 컬럼 데이터 추출
-                            if 'material_name' in column_mapping:
-                                chemical_info['물질명'] = cells[column_mapping['material_name']].get_text(strip=True)
-                            
-                            if 'cas_no' in column_mapping:
-                                chemical_info['CAS_No'] = cells[column_mapping['cas_no']].get_text(strip=True)
-                            
-                            if 'annual_input' in column_mapping:
-                                chemical_info['연간입고량'] = cells[column_mapping['annual_input']].get_text(strip=True)
-                            
-                            if 'annual_usage' in column_mapping:
-                                chemical_info['연간사용판매량'] = cells[column_mapping['annual_usage']].get_text(strip=True)
-                            
-                            # 빈 데이터가 아닌 경우만 추가
-                            if any(chemical_info.values()):
-                                chemical_data.append(chemical_info)
+            chemical_data = self.get_all_chemicals(bplc_id, year)
             
             # 화학물질 데이터가 있으면 결과에 추가
             if chemical_data:
