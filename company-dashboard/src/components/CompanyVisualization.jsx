@@ -121,25 +121,28 @@ const CompanyVisualization = () => {
   // 화학물질 사용량 분석
   const getChemicalData = () => {
     if (!data) return [];
-
+  
     const chemicalStats = [];
     data.forEach((company) => {
       const chemicals = company["화학물질정보"] || [];
       chemicals.forEach((chemical) => {
-        const usage =
-          chemical["연간사용판매량"] || chemical["연간입고량"] || "";
-        const usageNum = parseFloat(usage.replace(/[^0-9.]/g, ""));
-        if (!isNaN(usageNum) && usageNum > 0) {
-          chemicalStats.push({
-            company: company["업체명"] || company["원본_업체명"] || "미상",
-            chemical: chemical["물질명"] || chemical["CAS_No"] || "미상",
-            usage: usageNum,
-          });
-        }
+        // API 실제 키명으로 변경
+        const incomingAmt = chemical["INCOMING_AMT_RANGE"] || "";
+        const deliveryAmt = chemical["DELIVERY_AMT_RANGE"] || "";
+  
+        // 만약 수량이 숫자형태가 아니라 코드(문자)라면 가공 필요
+        // 아래는 예시로 코드값을 숫자로 변환하는 로직 작성 가능
+  
+        chemicalStats.push({
+          company: company["업체명"] || company["원본_업체명"] || "미상",
+          chemical: chemical["MATTER_NM"] || chemical["CAS_NO"] || "미상",
+          incomingAmountRange: incomingAmt,
+          deliveryAmountRange: deliveryAmt,
+        });
       });
     });
-
-    return chemicalStats.sort((a, b) => b.usage - a.usage).slice(0, 20);
+  
+    return chemicalStats;
   };
 
   const COLORS = [
