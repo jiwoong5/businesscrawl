@@ -16,12 +16,22 @@ class CompanyCrawler:
             "X-Requested-With": "XMLHttpRequest"
         }
     
-    def search_companies_by_material(self, material_name: str, year: str = "2022", max_companies: int = 10) -> List[Dict]:
-        """물질명으로 업체 목록 조회"""
-        print(f"🔍 물질명 '{material_name}'으로 {year}년도 업체 검색 중...")
-        
-        list_url = "https://icis.me.go.kr/iprtr/cdrInfoDetailListJson.do"
-        list_data = {
+    def send_post_request(self, url: str, data: Dict) -> Dict:
+        """POST 요청을 보내고 JSON 응답 반환"""
+        try:
+            res = self.session.post(url, headers=self.headers, data=data)
+            res.raise_for_status()
+            return res.json()
+        except Exception as e:
+            print(f"❌ POST 요청 실패: {e}")
+            return {}
+
+    def fetch_company_page_by_material(
+        self, material_name: str, year: str, page: int
+    ) -> List[Dict]:
+        """주어진 물질명과 연도, 페이지 번호로 업체 목록 1페이지 조회"""
+        url = "https://icis.me.go.kr/iprtr/cdrInfoDetailListJson.do"
+        payload = {
             "search1": year,
             "search3": "",
             "search4": "",
@@ -37,21 +47,40 @@ class CompanyCrawler:
             "indutyCode2": "",
             "indutyCode3": "",
             "indutyCode4": "",
-            "pageNo": "1"
+            "pageNo": str(page),
         }
-        
-        try:
-            response = self.session.post(list_url, headers=self.headers, data=list_data)
-            response.raise_for_status()
-            results = response.json()
-            
-            companies = results.get("list", [])[:max_companies]
-            print(f"✅ {len(companies)}개 업체 발견")
-            return companies
-            
-        except Exception as e:
-            print(f"❌ 업체 목록 조회 실패: {e}")
-            return []
+
+        response_json = self.send_post_request(url, payload)
+        return response_json.get("list", [])
+
+    def search_companies_by_material(
+        self, material_name: str, year: str = "2022", max_companies: int = 10
+    ) -> List[Dict]:
+        """물질명으로 업체 검색 후 max_companies 개수만큼 업체 목록 수집"""
+        print(f"🚀 물질명 '{material_name}' 기반 업체정보 크롤링 시작")
+        print(f"📅 검색년도: {year}, 최대 업체수: {max_companies}")
+        print("-" * 60)
+
+        companies = []
+        page = 1
+
+        while len(companies) < max_companies:
+            print(f"📄 페이지 {page} 조회 중...")
+            page_companies = self.fetch_company_page_by_material(material_name, year, page)
+            if not page_companies:
+                print("⚠️ 더 이상 조회할 업체가 없습니다.")
+                break
+
+            companies.extend(page_companies)
+            if len(page_companies) == 0:
+                break  # 페이지에 더 이상 데이터 없음
+            page += 1
+
+        # max_companies 이상이면 자름
+        companies = companies[:max_companies]
+
+        print(f"✅ 총 수집된 업체 수: {len(companies)}")
+        return companies
 
     
     def get_all_chemicals(self, bplc_id: str, year: str = "2022", page_unit: int = 200) -> List[Dict]:
@@ -85,10 +114,9 @@ class CompanyCrawler:
         
         return all_data
         
+    
     def get_company_details(self, bplc_id: str, year: str = "2022") -> Dict:
-        """업체 ID로 상세정보 조회"""
-        print(f"📋 업체 ID '{bplc_id}' 상세정보 조회 중...")
-        
+        """업체 ID로 상세정보 조회 (최대 3회 재시도)"""
         detail_url = 'https://icis.me.go.kr/iprtr/cdrInfoView.do'
         detail_headers = {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -101,76 +129,83 @@ class CompanyCrawler:
             'streNo': '',
             'searchYear': year,
         }
-        
-        try:
-            response = self.session.post(detail_url, headers=detail_headers, data=detail_data)
-            response.encoding = response.apparent_encoding
-            
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # 기본 정보 테이블 찾기
-            basic_table = soup.find('table', class_='view_table')
-            if not basic_table:
-                basic_table = soup.find('table', class_='viewTypeA')
-            if not basic_table:
-                basic_table = soup.find('table', class_='tbl_st3')
-            
-            result = {"bplcId": bplc_id}
-            
-            # 기본 정보 추출
-            if basic_table:
-                tbody = basic_table.find('tbody')
-                rows = tbody.find_all('tr') if tbody else basic_table.find_all('tr')
+
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                print(f"📋 업체 ID '{bplc_id}' 상세정보 조회 시도 {attempt}회차...")
+                response = self.session.post(detail_url, headers=detail_headers, data=detail_data)
+                response.encoding = response.apparent_encoding
                 
-                # 필드 추출 함수
-                def extract_field(field_name):
-                    for row in rows:
-                        th_list = row.find_all('th')
-                        td_list = row.find_all('td')
-                        for th, td in zip(th_list, td_list):
-                            if field_name in th.text.strip():
-                                return td.text.strip()
-                    return None
+                soup = BeautifulSoup(response.text, 'html.parser')
                 
-                # 기본 필드 리스트
-                fields = [
-                    '업체명', '대표자', '소재지', '대표업종',
-                    '종업원수', '관할 환경청', '사업장 비상연락번호',
-                    '설립년도', '자본금', '매출액', '업종분류'
-                ]
+                # 기본 정보 테이블 찾기
+                basic_table = soup.find('table', class_='view_table')
+                if not basic_table:
+                    basic_table = soup.find('table', class_='viewTypeA')
+                if not basic_table:
+                    basic_table = soup.find('table', class_='tbl_st3')
                 
-                for field in fields:
-                    value = extract_field(field)
-                    if value:
-                        result[field] = value
+                result = {"bplcId": bplc_id}
+                
+                if basic_table:
+                    tbody = basic_table.find('tbody')
+                    rows = tbody.find_all('tr') if tbody else basic_table.find_all('tr')
+                    
+                    def extract_field(field_name):
+                        for row in rows:
+                            th_list = row.find_all('th')
+                            td_list = row.find_all('td')
+                            for th, td in zip(th_list, td_list):
+                                if field_name in th.text.strip():
+                                    return td.text.strip()
+                        return None
+                    
+                    fields = [
+                        '업체명', '대표자', '소재지', '대표업종',
+                        '종업원수', '관할 환경청', '사업장 비상연락번호',
+                        '설립년도', '자본금', '매출액', '업종분류'
+                    ]
+                    
+                    for field in fields:
+                        value = extract_field(field)
+                        if value:
+                            result[field] = value
+                
+                if '업체명' not in result or not result['업체명']:
+                    company_name = soup.select_one("td.title strong")
+                    if company_name:
+                        result['업체명'] = company_name.text.strip()
+                
+                chemical_data = self.get_all_chemicals(bplc_id, year)
+                if chemical_data:
+                    result['화학물질정보'] = chemical_data
+                    print(f"✅ 업체 '{result.get('업체명', bplc_id)}' 정보 수집 완료 (화학물질 {len(chemical_data)}개)")
+                else:
+                    print(f"✅ 업체 '{result.get('업체명', bplc_id)}' 기본정보 수집 완료")
+                
+                return result
+
+            except Exception as e:
+                print(f"❌ 업체 ID '{bplc_id}' 상세정보 조회 실패 (시도 {attempt}): {e}")
+                if attempt < max_retries:
+                    time.sleep(2)  # 2초 대기 후 재시도
+                else:
+                    print(f"❌ 최대 재시도 {max_retries}회 실패, 조회 포기")
+                    return {"bplcId": bplc_id, "error": str(e)}
             
-            # 업체명이 없으면 제목에서 추출 시도
-            if '업체명' not in result or not result['업체명']:
-                company_name = soup.select_one("td.title strong")
-                if company_name:
-                    result['업체명'] = company_name.text.strip()
-            
-            chemical_data = self.get_all_chemicals(bplc_id, year)
-            
-            # 화학물질 데이터가 있으면 결과에 추가
-            if chemical_data:
-                result['화학물질정보'] = chemical_data
-                print(f"✅ 업체 '{result.get('업체명', bplc_id)}' 정보 수집 완료 (화학물질 {len(chemical_data)}개)")
-            else:
-                print(f"✅ 업체 '{result.get('업체명', bplc_id)}' 기본정보 수집 완료")
-            
-            return result
-            
-        except Exception as e:
-            print(f"❌ 업체 ID '{bplc_id}' 상세정보 조회 실패: {e}")
-            return {"bplcId": bplc_id, "error": str(e)}
-    
     def crawl_companies_by_material(self, material_name: str, year: str = "2022", 
                                   max_companies: int = 10, delay: float = 1.0) -> List[Dict]:
         """물질명으로 업체 검색 후 모든 업체의 상세정보 수집"""
         print(f"🚀 물질명 '{material_name}' 기반 업체정보 크롤링 시작")
         print(f"📅 검색년도: {year}, 최대 업체수: {max_companies}, 요청간격: {delay}초")
         print("-" * 60)
+        
+        session = requests.Session()
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
         
         # 1. 업체 목록 조회
         companies = self.search_companies_by_material(material_name, year, max_companies)
