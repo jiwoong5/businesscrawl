@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 import json
 import time
 from typing import List, Dict, Optional
-
+import math
 
 class CompanyCrawler:
     def __init__(self):
